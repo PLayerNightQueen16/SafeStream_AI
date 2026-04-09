@@ -136,6 +136,14 @@ Respond with exactly this format:
 
     raw = response.json()
     
+    if response.status_code != 200 or ("error" in raw and isinstance(raw, dict)):
+        error_msg = raw.get("error", str(raw))
+        return {
+            "decision": "flag",
+            "confidence": 0.5,
+            "explanation": f"HuggingFace API Error: {error_msg}"
+        }
+    
     if isinstance(raw, list):
         text_out = raw[0].get("generated_text", "")
     else:
