@@ -108,89 +108,28 @@ async def state():
 class ModerationRequest(BaseModel):
     text: str
 
-def hf_moderate(text: str, hf_scores: dict) -> dict:
-    api_key = os.getenv("HF_TOKEN")
-    
-    relevant_keys = ["toxicity", "severe_toxicity", "insult", "threat", "obscene", "identity_attack"]
-    filtered_scores = {k: round(hf_scores.get(k, 0.0), 3) for k in relevant_keys if k in hf_scores}
+def score_based_moderate(text: str, hf_scores: dict) -> dict:
+    toxicity = hf_scores.get("toxicity", 0.0)
+    threat   = hf_scores.get("threat", 0.0)
+    insult   = hf_scores.get("insult", 0.0)
+    obscene  = hf_scores.get("obscene", 0.0)
+    severe   = hf_scores.get("severe_toxicity", 0.0)
+    identity = hf_scores.get("identity_attack", 0.0)
 
-    prompt = f"""<s>[INST] You are a content moderation AI. Given the text and toxicity scores below, respond ONLY with a JSON object — no markdown, no extra text.
+    top = max(toxicity, threat, insult, obscene, severe, identity)
 
-Text: "{text}"
-Toxicity scores: {json.dumps(filtered_scores)}
-
-Rules:
-- "allow" = safe, no harm intended
-- "flag" = ambiguous, sarcastic, or mildly toxic  
-- "remove" = hate speech, threats, harassment
-
-Respond with exactly this format:
-{{\"decision\": \"allow\" or \"flag\" or \"remove\", \"confidence\": <0.0-1.0>, \"explanation\": \"<1 sentence reason>\"}} [/INST]"""
-
-    response = requests.post(
-        "https://router.huggingface.co/hf-inference/models/mistralai/Mistral-7B-Instruct-v0.3",
-        headers={"Authorization": f"Bearer {api_key}"},
-        json={"inputs": prompt, "parameters": {"max_new_tokens": 100, "return_full_text": False}},
-        timeout=30
-    )
-
-    # Check for empty response (model loading or auth error)
-    if not response.text or response.status_code != 200:
-        raise ValueError(f"HF API returned status {response.status_code}: {response.text}")
-
-    raw = response.json()
-
-    # Handle model loading state
-    if isinstance(raw, dict) and raw.get("error"):
-        error = raw["error"]
-        if "loading" in str(error).lower():
-            # Model is warming up, return a fallback based on HF scores alone
-            top_score = max(hf_scores.get("toxicity", 0), hf_scores.get("threat", 0), hf_scores.get("insult", 0))
-            if top_score > 0.7:
-                decision = "remove"
-            elif top_score > 0.4:
-                decision = "flag"
-            else:
-                decision = "allow"
-            return {"decision": decision, "confidence": round(top_score, 2), "explanation": "Scored using toxicity model (LLM warming up)."}
-        raise ValueError(f"HF API error: {error}")
-    
-    if isinstance(raw, list):
-        text_out = raw[0].get("generated_text", "")
+    if severe > 0.5 or threat > 0.6 or (toxicity > 0.7 and identity > 0.4):
+        return {"decision": "remove", "confidence": round(min(0.95, top + 0.1), 2),
+                "explanation": "Content contains severe toxicity, a credible threat, or targeted hate speech."}
+    elif top > 0.5 or toxicity > 0.6 or insult > 0.6:
+        return {"decision": "remove", "confidence": round(top, 2),
+                "explanation": "High toxicity or insult detected. Content likely violates community guidelines."}
+    elif top > 0.3 or toxicity > 0.35:
+        return {"decision": "flag", "confidence": round(top, 2),
+                "explanation": "Moderately toxic content detected. Flagged for human review."}
     else:
-        text_out = str(raw)
-
-    import re
-    import ast
-    
-    match = re.search(r'\{.*?\}', text_out, re.DOTALL)
-    result = {}
-    
-    if match:
-        json_str = match.group()
-        try:
-            result = json.loads(json_str)
-        except Exception:
-            try:
-                result = ast.literal_eval(json_str)
-                if not isinstance(result, dict):
-                    result = {}
-            except Exception:
-                pass
-
-    if not result:
-        result = {
-            "decision": "flag",
-            "confidence": 0.5,
-            "explanation": f"Complex JSON Parse Failure: {text_out.strip()}"
-        }
-
-    result["decision"] = result.get("decision", "flag").lower()
-    if result["decision"] not in ("allow", "flag", "remove"):
-        result["decision"] = "flag"
-    result["confidence"] = min(max(float(result.get("confidence", 0.5)), 0.0), 1.0)
-    result["explanation"] = result.get("explanation", "No explanation provided.")
-    return result
+        return {"decision": "allow", "confidence": round(1.0 - top, 2),
+                "explanation": "Content appears safe with low toxicity scores across all categories."}
 
 @app.post("/moderate")
 def moderate(request: ModerationRequest):
@@ -213,19 +152,18 @@ def moderate(request: ModerationRequest):
     # Stage 1: Lazy load and classify using HuggingFace RoBERTa 
     try:
         from app.models.toxicity_model import predict_toxicity
-        scores = predict_toxicity(text)
+        hf_scores = predict_toxicity(text)
     except Exception as e:
-        scores = {}
+        hf_scores = {}
         
+    llm_result = score_based_moderate(text, hf_scores)
+    
     ai_scores = {
-        "toxicity": float(scores.get("toxicity", 0.0)),
-        "insult": float(scores.get("insult", 0.0)),
-        "threat": float(scores.get("threat", 0.0)),
-        "obscene": float(scores.get("obscene", 0.0))
+        "toxicity": round(hf_scores.get("toxicity", 0.0), 3),
+        "insult":   round(hf_scores.get("insult", 0.0), 3),
+        "threat":   round(hf_scores.get("threat", 0.0), 3),
+        "obscene":  round(hf_scores.get("obscene", 0.0), 3),
     }
-
-    # Stage 2: HuggingFace Deep Reasoning
-    llm_result = hf_moderate(text, ai_scores)
     
     return {
         "decision": llm_result["decision"],
