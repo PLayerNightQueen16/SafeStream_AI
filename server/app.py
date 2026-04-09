@@ -134,15 +134,26 @@ Respond with exactly this format:
         timeout=30
     )
 
+    # Check for empty response (model loading or auth error)
+    if not response.text or response.status_code != 200:
+        raise ValueError(f"HF API returned status {response.status_code}: {response.text}")
+
     raw = response.json()
-    
-    if response.status_code != 200 or ("error" in raw and isinstance(raw, dict)):
-        error_msg = raw.get("error", str(raw))
-        return {
-            "decision": "flag",
-            "confidence": 0.5,
-            "explanation": f"HuggingFace API Error: {error_msg}"
-        }
+
+    # Handle model loading state
+    if isinstance(raw, dict) and raw.get("error"):
+        error = raw["error"]
+        if "loading" in str(error).lower():
+            # Model is warming up, return a fallback based on HF scores alone
+            top_score = max(hf_scores.get("toxicity", 0), hf_scores.get("threat", 0), hf_scores.get("insult", 0))
+            if top_score > 0.7:
+                decision = "remove"
+            elif top_score > 0.4:
+                decision = "flag"
+            else:
+                decision = "allow"
+            return {"decision": decision, "confidence": round(top_score, 2), "explanation": "Scored using toxicity model (LLM warming up)."}
+        raise ValueError(f"HF API error: {error}")
     
     if isinstance(raw, list):
         text_out = raw[0].get("generated_text", "")
