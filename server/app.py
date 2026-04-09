@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 
 import json
+import requests
 from openai import OpenAI
 from dotenv import load_dotenv
 
@@ -107,74 +108,52 @@ async def state():
 class ModerationRequest(BaseModel):
     text: str
 
-def openai_moderate(text: str, hf_scores: dict) -> dict:
-    system_prompt = """You are an expert content moderation AI.
-
-You will receive:
-1. The original text submitted by a user
-2. Toxicity scores (0.0-1.0) from a HuggingFace RoBERTa model across harm categories
-
-Your job is to make a final moderation decision based on the FULL CONTEXT and INTENT of the text -- not just individual words or scores. Consider:
-- Sarcasm, irony, or dark humour that may look toxic but is not genuinely harmful
-- Coded language or subtle threats that low scores might miss
-- Context that changes meaning (e.g. "I'll destroy you at chess" vs a real threat)
-- Whether content targets a specific person or group maliciously
-
-Respond ONLY with a valid JSON object -- no markdown fences, no extra text:
-{
-  "decision": "allow" or "flag" or "remove",
-  "confidence": <float 0.0-1.0>,
-  "explanation": "<1-2 sentence plain-English explanation of your reasoning>"
-}
-
-allow  = safe content, no harm intended or likely
-flag   = ambiguous, mildly toxic, sarcastic, context-dependent -- needs human review
-remove = clear hate speech, credible threats, targeted harassment, highly toxic content"""
-
-    user_prompt = f"Text to moderate: {text}\n\nToxicity Scores:\n{json.dumps(hf_scores, indent=2)}"
+def hf_moderate(text: str, hf_scores: dict) -> dict:
+    api_key = os.getenv("HF_TOKEN")
     
-    try:
-        response = get_openai_client().chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.0
-        )
-        content = response.choices[0].message.content.strip()
-        
-        # Security strip markdown edges
-        if content.startswith("```"):
-            lines = content.split("\n")
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            content = "\n".join(lines).strip()
-            
-        data = json.loads(content)
-        
-        # Hard cap enforcements
-        decision = data.get("decision", "flag").lower()
-        if decision not in ["allow", "flag", "remove"]:
-            decision = "flag"
-            
-        try:
-            confidence = float(data.get("confidence", 0.5))
-        except:
-            confidence = 0.5
-        confidence = max(0.0, min(1.0, confidence))
-        
-        return {
-            "decision": decision,
-            "confidence": confidence,
-            "explanation": str(data.get("explanation", "Automatically flagged due to complex parsing context."))
-        }
-        
-    except Exception as e:
-        raise RuntimeError(f"OpenAI call failed: {e}")
+    relevant_keys = ["toxicity", "severe_toxicity", "insult", "threat", "obscene", "identity_attack"]
+    filtered_scores = {k: round(hf_scores.get(k, 0.0), 3) for k in relevant_keys if k in hf_scores}
+
+    prompt = f"""<s>[INST] You are a content moderation AI. Given the text and toxicity scores below, respond ONLY with a JSON object — no markdown, no extra text.
+
+Text: "{text}"
+Toxicity scores: {json.dumps(filtered_scores)}
+
+Rules:
+- "allow" = safe, no harm intended
+- "flag" = ambiguous, sarcastic, or mildly toxic  
+- "remove" = hate speech, threats, harassment
+
+Respond with exactly this format:
+{{\"decision\": \"allow\" or \"flag\" or \"remove\", \"confidence\": <0.0-1.0>, \"explanation\": \"<1 sentence reason>\"}} [/INST]"""
+
+    response = requests.post(
+        "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3",
+        headers={"Authorization": f"Bearer {api_key}"},
+        json={"inputs": prompt, "parameters": {"max_new_tokens": 100, "return_full_text": False}},
+        timeout=30
+    )
+
+    raw = response.json()
+    
+    if isinstance(raw, list):
+        text_out = raw[0].get("generated_text", "")
+    else:
+        text_out = str(raw)
+
+    import re
+    match = re.search(r'\{.*?\}', text_out, re.DOTALL)
+    if match:
+        result = json.loads(match.group())
+    else:
+        raise ValueError(f"No JSON found in response: {text_out}")
+
+    result["decision"] = result.get("decision", "flag").lower()
+    if result["decision"] not in ("allow", "flag", "remove"):
+        result["decision"] = "flag"
+    result["confidence"] = min(max(float(result.get("confidence", 0.5)), 0.0), 1.0)
+    result["explanation"] = result.get("explanation", "No explanation provided.")
+    return result
 
 @app.post("/moderate")
 def moderate(request: ModerationRequest):
@@ -208,8 +187,8 @@ def moderate(request: ModerationRequest):
         "obscene": float(scores.get("obscene", 0.0))
     }
 
-    # Stage 2: OpenAI Deep Reasoning
-    llm_result = openai_moderate(text, ai_scores)
+    # Stage 2: HuggingFace Deep Reasoning
+    llm_result = hf_moderate(text, ai_scores)
     
     return {
         "decision": llm_result["decision"],
