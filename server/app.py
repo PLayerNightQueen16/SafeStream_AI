@@ -18,6 +18,8 @@ def get_openai_client():
     global _openai_client
     if _openai_client is None:
         api_key = os.getenv("API_KEY") or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("No OpenAI API key found")
         _openai_client = OpenAI(api_key=api_key)
     return _openai_client
 
@@ -172,11 +174,7 @@ remove = clear hate speech, credible threats, targeted harassment, highly toxic 
         }
         
     except Exception as e:
-        return {
-            "decision": "flag",
-            "confidence": 0.5,
-            "explanation": f"LLM parsing bypassed: {str(e)}"
-        }
+        raise RuntimeError(f"OpenAI call failed: {e}")
 
 @app.post("/moderate")
 def moderate(request: ModerationRequest):
