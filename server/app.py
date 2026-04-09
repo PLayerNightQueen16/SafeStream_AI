@@ -142,11 +142,29 @@ Respond with exactly this format:
         text_out = str(raw)
 
     import re
+    import ast
+    
     match = re.search(r'\{.*?\}', text_out, re.DOTALL)
+    result = {}
+    
     if match:
-        result = json.loads(match.group())
-    else:
-        raise ValueError(f"No JSON found in response: {text_out}")
+        json_str = match.group()
+        try:
+            result = json.loads(json_str)
+        except Exception:
+            try:
+                result = ast.literal_eval(json_str)
+                if not isinstance(result, dict):
+                    result = {}
+            except Exception:
+                pass
+
+    if not result:
+        result = {
+            "decision": "flag",
+            "confidence": 0.5,
+            "explanation": f"Complex JSON Parse Failure: {text_out.strip()}"
+        }
 
     result["decision"] = result.get("decision", "flag").lower()
     if result["decision"] not in ("allow", "flag", "remove"):
