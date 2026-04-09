@@ -9,15 +9,15 @@ tasks:
   - id: task_1
     description: "Moderate hate speech"
     graders:
-      - type: "exact_match"
+      - type: "match"
         expected: "remove"
   - id: task_2
     description: "Moderate praise"
     graders:
-      - type: "exact_match"
+      - type: "match"
         expected: "allow"
   - id: task_3
     description: "Moderate sarcasm"
     graders:
-      - type: "exact_match"
+      - type: "match"
         expected: "flag"
