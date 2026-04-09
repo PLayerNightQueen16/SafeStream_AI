@@ -12,7 +12,14 @@ load_dotenv()
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-openai_client = OpenAI()
+_openai_client = None
+
+def get_openai_client():
+    global _openai_client
+    if _openai_client is None:
+        api_key = os.getenv("API_KEY") or os.getenv("OPENAI_API_KEY")
+        _openai_client = OpenAI(api_key=api_key)
+    return _openai_client
 
 app = FastAPI(docs_url=None, redoc_url=None)
 
@@ -125,7 +132,7 @@ remove = clear hate speech, credible threats, targeted harassment, highly toxic 
     user_prompt = f"Text to moderate: {text}\n\nToxicity Scores:\n{json.dumps(hf_scores, indent=2)}"
     
     try:
-        response = openai_client.chat.completions.create(
+        response = get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
