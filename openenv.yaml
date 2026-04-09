@@ -8,16 +8,16 @@ endpoints:
 tasks:
   - id: task_1
     description: "Moderate hate speech"
-    grader:
-      type: "exact_match"
-      expected: "remove"
+    graders:
+      - type: "exact_match"
+        expected: "remove"
   - id: task_2
     description: "Moderate praise"
-    grader:
-      type: "exact_match"
-      expected: "allow"
+    graders:
+      - type: "exact_match"
+        expected: "allow"
   - id: task_3
     description: "Moderate sarcasm"
-    grader:
-      type: "exact_match"
-      expected: "flag"
+    graders:
+      - type: "exact_match"
+        expected: "flag"
