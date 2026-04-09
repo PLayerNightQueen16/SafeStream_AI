@@ -118,18 +118,30 @@ def score_based_moderate(text: str, hf_scores: dict) -> dict:
 
     top = max(toxicity, threat, insult, obscene, severe, identity)
 
-    if severe > 0.5 or threat > 0.6 or (toxicity > 0.7 and identity > 0.4):
+    # REMOVE: only genuinely harmful content
+    if severe > 0.4 or threat > 0.7 or (toxicity > 0.85 and identity > 0.5):
         return {"decision": "remove", "confidence": round(min(0.95, top + 0.1), 2),
                 "explanation": "Content contains severe toxicity, a credible threat, or targeted hate speech."}
-    elif top > 0.5 or toxicity > 0.6 or insult > 0.6:
+
+    # REMOVE: very high combined scores
+    elif toxicity > 0.85 and insult > 0.85:
         return {"decision": "remove", "confidence": round(top, 2),
-                "explanation": "High toxicity or insult detected. Content likely violates community guidelines."}
-    elif top > 0.3 or toxicity > 0.35:
+                "explanation": "Highly toxic and insulting content that violates community guidelines."}
+
+    # FLAG: mildly toxic or insulting — needs human review
+    elif toxicity > 0.6 or insult > 0.7 or top > 0.6:
         return {"decision": "flag", "confidence": round(top, 2),
-                "explanation": "Moderately toxic content detected. Flagged for human review."}
+                "explanation": "Mildly toxic or insulting content. Flagged for human review."}
+
+    # FLAG: borderline
+    elif top > 0.4:
+        return {"decision": "flag", "confidence": round(top, 2),
+                "explanation": "Potentially offensive content detected. Flagged for review."}
+
+    # ALLOW: safe
     else:
         return {"decision": "allow", "confidence": round(1.0 - top, 2),
-                "explanation": "Content appears safe with low toxicity scores across all categories."}
+                "explanation": "Content appears safe with low toxicity scores."}
 
 @app.post("/moderate")
 def moderate(request: ModerationRequest):
