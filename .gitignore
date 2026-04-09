@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+*.pth
+.env
+.DS_Store
+!dqn_model.pth

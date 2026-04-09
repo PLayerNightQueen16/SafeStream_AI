@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SafeStream AI</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+
+<body>
+
+  <div class="header">
+    <div class="brand">
+      <img src="/static/logo.jpeg" class="logo" />
+      <h1 class="title">SafeStream AI</h1>
+    </div>
+  </div>
+  <div class="gradient-bar"></div>
+
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+        </svg>
+        Total Analyzed
+      </div>
+      <div class="stat-value" id="stat-total">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3FB6B2" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+        Allowed
+      </div>
+      <div class="stat-value" id="stat-allowed">0</div>
+      <div class="stat-sub" id="stat-allowed-pct">0% of total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF476F" stroke-width="2">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="15" y1="9" x2="9" y2="15" />
+          <line x1="9" y1="9" x2="15" y2="15" />
+        </svg>
+        Removed
+      </div>
+      <div class="stat-value" id="stat-removed">0</div>
+      <div class="stat-sub" id="stat-removed-pct">0% of total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="20" x2="18" y2="10" />
+          <line x1="12" y1="20" x2="12" y2="4" />
+          <line x1="6" y1="20" x2="6" y2="14" />
+        </svg>
+        Avg Confidence
+      </div>
+      <div class="stat-value" id="stat-conf">0%</div>
+    </div>
+  </div>
+
+  <div class="analyzer-wrap">
+    <div class="section-title">Analyze Content</div>
+    <div class="section-sub">Enter text to scan for toxicity, threats, and policy violations.</div>
+    <textarea id="inputText" placeholder="Paste comment, message, or post text here..."></textarea>
+    <div class="btn-row">
+      <button class="analyze-btn" id="analyzeBtn" onclick="analyze()">
+        <svg class="shield-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+        </svg>
+        Analyze Content
+      </button>
+    </div>
+  </div>
+
+  <div class="results-wrap" id="resultsWrap">
+    <div class="results-header">
+      <div class="results-title">Analysis Results</div>
+      <div class="decision-badge" id="decisionBadge"></div>
+    </div>
+    <div class="results-grid">
+      <div class="explanation-box">
+        <div class="expl-label">Explanation</div>
+        <div class="expl-text" id="explText"></div>
+        <div class="meta-row">
+          <div class="meta-card">
+            <div class="meta-key">RL Decision</div>
+            <div class="meta-val" id="metaDecision"></div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-key">Confidence</div>
+            <div class="meta-val" id="metaConf"></div>
+          </div>
+        </div>
+      </div>
+      <div class="scores-box">
+        <div class="expl-label">AI Scores</div>
+        <div id="scoresContainer"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="history-wrap">
+    <div class="history-title">Recent History</div>
+    <div id="historyList">
+      <div class="empty-history">No analyses yet. Submit some content above to get started.</div>
+    </div>
+  </div>
+
+  <script src="/static/script.js"></script>
+</body>
+
+</html>
