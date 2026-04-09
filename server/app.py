@@ -108,40 +108,54 @@ async def state():
 class ModerationRequest(BaseModel):
     text: str
 
-def score_based_moderate(text: str, hf_scores: dict) -> dict:
-    toxicity = hf_scores.get("toxicity", 0.0)
-    threat   = hf_scores.get("threat", 0.0)
-    insult   = hf_scores.get("insult", 0.0)
-    obscene  = hf_scores.get("obscene", 0.0)
-    severe   = hf_scores.get("severe_toxicity", 0.0)
-    identity = hf_scores.get("identity_attack", 0.0)
+from groq import Groq
 
-    top = max(toxicity, threat, insult, obscene, severe, identity)
+def groq_moderate(text: str, hf_scores: dict) -> dict:
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-    # REMOVE: only genuinely harmful content
-    if severe > 0.4 or threat > 0.7 or (toxicity > 0.85 and identity > 0.5):
-        return {"decision": "remove", "confidence": round(min(0.95, top + 0.1), 2),
-                "explanation": "Content contains severe toxicity, a credible threat, or targeted hate speech."}
+    relevant_keys = ["toxicity", "severe_toxicity", "insult", "threat", "obscene", "identity_attack"]
+    filtered_scores = {k: round(hf_scores.get(k, 0.0), 3) for k in relevant_keys if k in hf_scores}
 
-    # REMOVE: very high combined scores
-    elif toxicity > 0.85 and insult > 0.85:
-        return {"decision": "remove", "confidence": round(top, 2),
-                "explanation": "Highly toxic and insulting content that violates community guidelines."}
+    response = client.chat.completions.create(
+        model="llama3-8b-8192",
+        messages=[
+            {"role": "system", "content": """You are an expert content moderation AI.
 
-    # FLAG: mildly toxic or insulting — needs human review
-    elif toxicity > 0.6 or insult > 0.7 or top > 0.6:
-        return {"decision": "flag", "confidence": round(top, 2),
-                "explanation": "Mildly toxic or insulting content. Flagged for human review."}
+You will receive text and toxicity scores (0.0-1.0) from a RoBERTa model.
 
-    # FLAG: borderline
-    elif top > 0.4:
-        return {"decision": "flag", "confidence": round(top, 2),
-                "explanation": "Potentially offensive content detected. Flagged for review."}
+Make a decision based on FULL CONTEXT and INTENT — not just keywords. Consider:
+- Sarcasm or dark humour that looks toxic but isn't harmful
+- Context that changes meaning ("I'll destroy you at chess" is fine)
+- Whether content genuinely targets a person harmfully
+- Mild insults like "idiot" or "stupid" should be FLAG not REMOVE
 
-    # ALLOW: safe
-    else:
-        return {"decision": "allow", "confidence": round(1.0 - top, 2),
-                "explanation": "Content appears safe with low toxicity scores."}
+Respond ONLY with valid JSON, no markdown:
+{"decision": "allow" or "flag" or "remove", "confidence": <0.0-1.0>, "explanation": "<1 sentence>"}
+
+allow  = safe content
+flag   = mildly toxic, rude, or ambiguous
+remove = genuine hate speech, real threats, severe harassment"""},
+            {"role": "user", "content": f'Text: "{text}"\nScores: {json.dumps(filtered_scores)}\nModerate this.'}
+        ],
+        temperature=0.1,
+        max_tokens=100,
+    )
+
+    raw = response.choices[0].message.content.strip()
+
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip()
+
+    result = json.loads(raw)
+    result["decision"] = result.get("decision", "flag").lower()
+    if result["decision"] not in ("allow", "flag", "remove"):
+        result["decision"] = "flag"
+    result["confidence"] = min(max(float(result.get("confidence", 0.5)), 0.0), 1.0)
+    result["explanation"] = result.get("explanation", "No explanation provided.")
+    return result
 
 @app.post("/moderate")
 def moderate(request: ModerationRequest):
@@ -168,7 +182,7 @@ def moderate(request: ModerationRequest):
     except Exception as e:
         hf_scores = {}
         
-    llm_result = score_based_moderate(text, hf_scores)
+    llm_result = groq_moderate(text, hf_scores)
     
     ai_scores = {
         "toxicity": round(hf_scores.get("toxicity", 0.0), 3),

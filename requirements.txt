@@ -17,3 +17,4 @@ openai
 openenv-core
 python-dotenv
 requests
+groq
