@@ -24,15 +24,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-data = [
-    ("I love this!", "allow"),
-    ("You are amazing", "allow"),
-    ("I hate you", "remove"),
-    ("Go die", "remove"),
-    ("Wow you're so smart 🙄", "flag"),
-    ("Maybe you should disappear", "remove"),
-    ("Nice work!", "allow"),
-    ("This is trash", "flag")
+# Tasks that match openenv.yaml exactly
+TASKS = [
+    {"id": "task_1", "text": "I hate you", "label": "remove"},
+    {"id": "task_2", "text": "You are amazing", "label": "allow"},
+    {"id": "task_3", "text": "Wow you're so smart 🙄", "label": "flag"},
 ]
 
 current_task_idx = 0
@@ -55,15 +51,10 @@ class ResetResponse(BaseModel):
 @app.post("/reset", response_model=ResetResponse)
 async def reset(request: Request):
     global current_task_idx
-    body = {}
-    try:
-        body = await request.json()
-    except:
-        pass
-    
+    current_task_idx = 0
     return ResetResponse(
-        observation=Observation(echoed_message=data[current_task_idx][0]),
-        done=False
+        observation=Observation(echoed_message=TASKS[current_task_idx]["text"]),
+        done=False,
     )
 
 @app.post("/step", response_model=StepResponse)
@@ -72,35 +63,36 @@ async def step(request: Request):
     body = {}
     try:
         body = await request.json()
-    except:
+    except Exception:
         pass
-        
+
     msg = ""
     if "action" in body and isinstance(body["action"], dict) and "message" in body["action"]:
         msg = body["action"]["message"]
     elif "message" in body:
         msg = body["message"]
-        
-    true_label = data[current_task_idx][1]
-    
-    if msg.lower().strip() == true_label.lower():
-        reward = 1.0
-    else:
-        reward = 0.0
 
-    current_task_idx = (current_task_idx + 1) % len(data)
-    
+    true_label = TASKS[current_task_idx]["label"]
+    reward = 1.0 if msg.lower().strip() == true_label.lower() else 0.0
+
+    current_task_idx += 1
+    done = current_task_idx >= len(TASKS)
+
+    next_text = TASKS[current_task_idx]["text"] if not done else ""
+
     return StepResponse(
-        observation=Observation(echoed_message=data[current_task_idx][0]),
+        observation=Observation(echoed_message=next_text),
         reward=reward,
-        done=True
+        done=done,
     )
 
 @app.get("/state")
 async def state():
+    done = current_task_idx >= len(TASKS)
+    next_text = TASKS[current_task_idx]["text"] if not done else ""
     return {
-        "observation": {"echoed_message": data[current_task_idx][0]},
-        "done": False
+        "observation": {"echoed_message": next_text},
+        "done": done
     }
 
 class ModerationRequest(BaseModel):
