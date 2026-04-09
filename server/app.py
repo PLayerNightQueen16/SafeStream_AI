@@ -128,7 +128,7 @@ Respond with exactly this format:
 {{\"decision\": \"allow\" or \"flag\" or \"remove\", \"confidence\": <0.0-1.0>, \"explanation\": \"<1 sentence reason>\"}} [/INST]"""
 
     response = requests.post(
-        "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3",
+        "https://router.huggingface.co/hf-inference/models/mistralai/Mistral-7B-Instruct-v0.3",
         headers={"Authorization": f"Bearer {api_key}"},
         json={"inputs": prompt, "parameters": {"max_new_tokens": 100, "return_full_text": False}},
         timeout=30
