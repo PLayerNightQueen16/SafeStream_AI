@@ -117,7 +117,7 @@ def groq_moderate(text: str, hf_scores: dict) -> dict:
     filtered_scores = {k: round(hf_scores.get(k, 0.0), 3) for k in relevant_keys if k in hf_scores}
 
     response = client.chat.completions.create(
-        model="llama3-8b-8192",
+        model="llama-3.3-70b-versatile",
         messages=[
             {"role": "system", "content": """You are an expert content moderation AI.
 
