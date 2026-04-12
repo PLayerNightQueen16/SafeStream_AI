@@ -36,9 +36,9 @@ app.add_middleware(
 
 # Tasks that match openenv.yaml exactly
 TASKS = [
-    {"id": "task_1", "text": "I hate you", "label": "remove"},
-    {"id": "task_2", "text": "You are amazing", "label": "allow"},
-    {"id": "task_3", "text": "Wow you're so smart 🙄", "label": "flag"},
+    {"id": "task_1", "text": "i will kill", "label": "remove"},
+    {"id": "task_2", "text": "you are idiot", "label": "flag"},
+    {"id": "task_3", "text": "you are lovely", "label": "allow"},
 ]
 
 current_task_idx = 0

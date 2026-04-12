@@ -7,17 +7,17 @@ endpoints:
   state: /state
 tasks:
   - id: task_1
-    description: "Moderate hate speech"
+    description: "Moderate a threat"
     graders:
       - type: "match"
         expected: "remove"
   - id: task_2
-    description: "Moderate praise"
-    graders:
-      - type: "match"
-        expected: "allow"
-  - id: task_3
-    description: "Moderate sarcasm"
+    description: "Moderate an insult"
     graders:
       - type: "match"
         expected: "flag"
+  - id: task_3
+    description: "Moderate a compliment"
+    graders:
+      - type: "match"
+        expected: "allow"
